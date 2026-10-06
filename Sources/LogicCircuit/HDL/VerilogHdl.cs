@@ -158,7 +158,7 @@ namespace LogicCircuit {
 			this.WriteLine(");");
 
 			// allocate memory array
-			this.WriteLine("\treg{0} memory[0:{1}];", VerilogHdl.Range(memory.DataOutPin), 1 << memory.AddressBitWidth);
+			this.WriteLine("\treg{0} memory[0:{1}];", VerilogHdl.Range(memory.DataOutPin), (1 << memory.AddressBitWidth) - 1);
 			if(memory.Writable && memory.OnStart != MemoryOnStart.Data) {
 				this.WriteLine("\tinteger i;");
 			}
