@@ -55,7 +55,7 @@ namespace LogicCircuit {
 		public abstract string HdlName(HdlSymbol symbol);
 		public virtual string HdlName(Jam jam) => jam.Pin.Name.Trim();
 
-		protected void Message(string text) => this.logMessage(text);
+		public void Message(string text) => this.logMessage(text);
 
 		public void Error(string text) {
 			this.ErrorCount++;
@@ -117,6 +117,11 @@ namespace LogicCircuit {
 				} else {
 					result = walk(map, new HashSet<LogicalCircuit>());
 				}
+
+				if(this.ErrorCount == 0) {
+					this.FinalizeExport(map, connectionSet, folder);
+				}
+
 				this.Message(Properties.Resources.MessageHdlExportDone(this.ErrorCount));
 				onFinished();
 			}
@@ -133,7 +138,7 @@ namespace LogicCircuit {
 			return result;
 		}
 
-		private Dictionary<CircuitSymbol, HdlSymbol> Collect(LogicalCircuit circuit, ConnectionSet connectionSet) {
+		protected Dictionary<CircuitSymbol, HdlSymbol> Collect(LogicalCircuit circuit, ConnectionSet connectionSet) {
 			bool consider(CircuitSymbol symbol, bool showError) {
 				Circuit circuit = symbol.Circuit;
 				if(!this.CanExport(circuit)) {
@@ -222,7 +227,11 @@ namespace LogicCircuit {
 				return null;
 			}
 			transformation.CommentPoints = this.commentPoints;
-			return transformation.TransformText();
+			string? hdl = transformation.TransformText();
+
+			this.FinalizeTransformation(transformation, circuit);
+
+			return hdl;
 		}
 
 		private static void OrderSymbols(Dictionary<CircuitSymbol, HdlSymbol> symbolMap) {
@@ -324,6 +333,13 @@ namespace LogicCircuit {
 			} else {
 				this.Warning(Properties.Resources.MessageInputOutputPinsMissing);
 			}
+		}
+		protected virtual void FinalizeTransformation(HdlTransformation transformation, LogicalCircuit circuit) {
+			Tracer.Assert(false);
+		}
+
+		protected virtual void FinalizeExport(CircuitMap circuitMap, ConnectionSet connectionSet, string folder) {
+			Tracer.Assert(false);
 		}
 	}
 }
