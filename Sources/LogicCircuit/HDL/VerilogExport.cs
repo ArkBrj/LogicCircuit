@@ -39,16 +39,17 @@ namespace LogicCircuit {
 
 			//"and", "bufif1", "nand", "nor", "not", "or", "xnor", "xor",
 		};
-		
+
 		// Hardware Interface aggregated collections.
 		//
-		private Dictionary<LogicalCircuit, List<(string, bool)>> HWIfWireMap;
-		//private Dictionary<string, List<string>> HWIfInstanceMap = new();
+		private Dictionary<LogicalCircuit, string> HWIfInterfaceMap;
+		private Dictionary<string, (List<(string, string)>, List<(string, bool)>)> HWIfMemberMap;
 
 		public VerilogExport(bool exportTests, bool commentPoints, bool fixNames, Action<string> logMessage, Action<string> logError, Action<string> logWarning) : base(
 			exportTests, commentPoints, fixNames, logMessage, logError, logWarning
 		) {
-			HWIfWireMap = new Dictionary<LogicalCircuit, List<(string, bool)>>();
+			HWIfInterfaceMap = new Dictionary<LogicalCircuit, string>();
+			HWIfMemberMap = new Dictionary<string, (List<(string, string)>, List<(string, bool)>)>();
 		}
 
 		protected override string FileName(LogicalCircuit circuit) => this.FixName(circuit.Name) + ".sv";
@@ -178,17 +179,19 @@ namespace LogicCircuit {
 			VerilogHdl? verilogTransform = transformation as VerilogHdl;
 			Trace.Assert(verilogTransform != null);
 
-			this.HWIfWireMap[circuit] = verilogTransform.HWIfWires;
+			this.HWIfInterfaceMap[circuit] = verilogTransform.HWIfTypeName;
+			this.HWIfMemberMap[verilogTransform.HWIfTypeName] = (verilogTransform.HWIfInstances, verilogTransform.HWIfWires);
 		}
 
 		protected override void FinalizeExport(CircuitMap circuitMap, ConnectionSet connectionSet, string folder) {
 			List<(string, bool)> ports = new List<(string, bool)>();
 
 			void extract(string hwifPath, CircuitMap circuitMap) {
-				List<(string, bool)>? portList = null;
-				this.HWIfWireMap.TryGetValue(circuitMap.Circuit, out portList);
-				if(portList != null) {
-					foreach(var (portName, isOutput) in portList) {
+				string hwifTypeName;
+				this.HWIfInterfaceMap.TryGetValue(circuitMap.Circuit, out hwifTypeName);
+				if(hwifTypeName != null) {
+					var (interfaces, wires) = this.HWIfMemberMap[hwifTypeName];
+					foreach(var (portName, isOutput) in wires) {
 						ports.Add((String.Format(System.Globalization.CultureInfo.InvariantCulture, "{0}.{1}", hwifPath, portName), isOutput));
 					}
 				}
@@ -211,17 +214,33 @@ namespace LogicCircuit {
 			string hwifPath = String.Format(System.Globalization.CultureInfo.InvariantCulture, "{0}.{1}", VerilogHdl.HWIfParamName, this.FixName(circuitMap.Circuit.Name));
 			walk(hwifPath, circuitMap);
 
+			using(StreamWriter writer = new StreamWriter(Path.Combine(folder, "hwif.sv"))) {
+				GenerateHWInterfaces(writer, this.FixName(circuitMap.Circuit.Name));
+			}
+
 			using(StreamWriter writer = new StreamWriter(Path.Combine(folder, "top.sv.example"))) {
-				GenerateHWInterface(writer, this.FixName(circuitMap.Circuit.Name));
 				GenerateTopModule(writer, this.FixName(circuitMap.Circuit.Name), ports);
 			}
 		}
 
-		private void GenerateHWInterface(StreamWriter writer, string circuitName) {
+		private void GenerateHWInterfaces(StreamWriter writer, string circuitName) {
+
+			foreach(var (hwifTypeName, children) in this.HWIfMemberMap.Reverse()) {
+				writer.WriteLine("interface {0};", hwifTypeName);
+				var (interfaces, wires) = this.HWIfMemberMap[hwifTypeName];
+				foreach(var (hwifChildTypeName, hwifChildFieldName) in interfaces) {
+					writer.WriteLine("\t{0}\t{1}();", hwifChildTypeName, hwifChildFieldName);
+				}
+				foreach(var (portName, isOutput) in wires) {
+					writer.WriteLine("\tlogic\t{0};", portName);
+				}
+				writer.WriteLine("endinterface");
+				writer.WriteLine();
+			}
+
 			writer.WriteLine(String.Format(System.Globalization.CultureInfo.InvariantCulture, "interface {0};", VerilogHdl.HWIfTypeNamePrefix));
 			writer.WriteLine(String.Format(System.Globalization.CultureInfo.InvariantCulture, "\t{0}_{1}\t{1}();", VerilogHdl.HWIfTypeNamePrefix, circuitName));
 			writer.WriteLine("endinterface");
-			writer.WriteLine("");
 		}
 
 		private void GenerateTopModule(StreamWriter writer, string circuitName, List<(string, bool)> ports) {
@@ -289,7 +308,7 @@ namespace LogicCircuit {
 			// Instantiate the top-level circuit.
 			//
 			writer.WriteLine("");
-			writer.WriteLine(String.Format(System.Globalization.CultureInfo.InvariantCulture, "\t{0}\tm_{0}({1}.{0});", circuitName, VerilogHdl.HWIfParamName));
+			writer.WriteLine(String.Format(System.Globalization.CultureInfo.InvariantCulture, "\t{0} m_{0}(.{1}({1}.{0}));", circuitName, VerilogHdl.HWIfParamName));
 
 			writer.WriteLine("endmodule");
 		}

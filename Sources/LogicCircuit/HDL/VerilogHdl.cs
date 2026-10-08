@@ -207,8 +207,6 @@ namespace LogicCircuit {
 		public override string TransformText() {
 			this.Prepare();
 
-			//List<(string?, string)> if_members = new List<(string?, string)>();
-
 			foreach(HdlSymbol symbol in this.Parts) {
 				if(symbol.CircuitSymbol.Circuit is Memory) {
 					this.WriteMemory(symbol);
@@ -373,20 +371,6 @@ namespace LogicCircuit {
 			}
 
 			this.WriteLine("endmodule // {0}", this.Name);
-
-            this.WriteLine();
-
-            this.WriteLine("interface {0};", this.HWIfTypeName);
-			
-			foreach(var (typeName, fieldName) in this.HWIfInstances) {
-				this.WriteLine("\t{0}\t{1}();", typeName, fieldName);
-			}
-
-			foreach(var (portName, isOutput) in this.HWIfWires) {
-				this.WriteLine("\tlogic\t{0};", portName);
-			}
-
-			this.WriteLine("endinterface");
 
             return this.GenerationEnvironment.ToString();
 		}
