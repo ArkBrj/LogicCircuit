@@ -28,6 +28,9 @@ namespace LogicCircuit {
 			foreach(HdlSymbol output in this.OutputPins) {
 				Jam jam = output.CircuitSymbol.Jams().First();
 				this.wires.Add(jam, jam);
+				foreach(HdlConnection connection in output.HdlConnections().Where(c => c.OtherJam(jam).CircuitSymbol.Circuit is Constant)) {
+					this.assignments.Add(connection.OtherJam(jam), connection);
+				}
 			}
 			foreach(HdlConnection connection in this.Parts.SelectMany(p => p.HdlConnections())) {
 				this.connections.Add(connection.OutJam, connection);
