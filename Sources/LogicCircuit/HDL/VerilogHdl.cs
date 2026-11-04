@@ -351,16 +351,7 @@ namespace LogicCircuit {
 									this.Write("}");
 								}
 							}
-						} /*else {
-							// Even if the pin is not connected, we still need to include it in the module instantiation.
-							//
-							if(jam.Pin.PinType == PinType.Output) {
-								if(comma)
-									this.WriteLine(",");
-								this.Write("\t\t.{0}()", part.HdlExport.HdlName(jam));
-								comma = true;
-							}
-						} */
+						}
 						if(!external) {
 							this.Write(")");
 						}

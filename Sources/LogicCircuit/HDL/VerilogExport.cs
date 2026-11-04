@@ -193,7 +193,7 @@ namespace LogicCircuit {
 			List<(string, bool)> ports = new List<(string, bool)>();
 
 			void extract(string hwifPath, CircuitMap circuitMap) {
-				string hwifTypeName;
+				string? hwifTypeName;
 				this.HWIfInterfaceMap.TryGetValue(circuitMap.Circuit, out hwifTypeName);
 				if(hwifTypeName != null) {
 					var (interfaces, wires) = this.HWIfMemberMap[hwifTypeName];
@@ -249,8 +249,10 @@ namespace LogicCircuit {
 			writer.WriteLine("endinterface");
 		}
 
+#pragma warning disable CA1822 // Mark members as static
 		private void GenerateTopModule(StreamWriter writer, string circuitName, List<(string, bool)> ports) {
-			
+#pragma warning restore CA1822 // Mark members as static
+
 			writer.WriteLine("module top(");
 
 			// Generate external input ports.
