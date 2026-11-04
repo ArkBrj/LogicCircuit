@@ -55,7 +55,7 @@ namespace LogicCircuit {
 		public abstract string HdlName(HdlSymbol symbol);
 		public virtual string HdlName(Jam jam) => jam.Pin.Name.Trim();
 
-		public void Message(string text) => this.logMessage(text);
+		protected void Message(string text) => this.logMessage(text);
 
 		public void Error(string text) {
 			this.ErrorCount++;
@@ -334,6 +334,7 @@ namespace LogicCircuit {
 				this.Warning(Properties.Resources.MessageInputOutputPinsMissing);
 			}
 		}
+
 		protected virtual void FinalizeTransformation(HdlTransformation transformation, LogicalCircuit circuit) {
 			Tracer.Assert(false);
 		}

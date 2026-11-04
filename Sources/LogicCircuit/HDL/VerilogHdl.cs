@@ -5,7 +5,6 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
-using System.Reflection.Metadata;
 
 namespace LogicCircuit {
 	internal sealed class VerilogHdl : HdlTransformation {
@@ -372,7 +371,7 @@ namespace LogicCircuit {
 
 			this.WriteLine("endmodule // {0}", this.Name);
 
-            return this.GenerationEnvironment.ToString();
+			return this.GenerationEnvironment.ToString();
 		}
 	}
 }

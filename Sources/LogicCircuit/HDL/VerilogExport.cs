@@ -1,6 +1,5 @@
 ﻿// Ignore Spelling: Verilog Hdl
 
-using IronPython.Runtime;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -8,8 +7,6 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
-using static IronPython.Modules._ast;
-using static IronPython.Modules.PythonCsvModule;
 
 namespace LogicCircuit {
 	/// <summary>
