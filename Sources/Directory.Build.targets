@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project>
 	<PropertyGroup>
-		<ZipApp>$(ProgramW6432)\7-Zip\7z.exe</ZipApp>
+		<ZipApp Condition="'$(ZipApp)' == ''">$(ProgramW6432)\7-Zip\7z.exe</ZipApp>
 	</PropertyGroup>
 
 	<Target Name="PublishProject" AfterTargets="AfterBuild" Condition="'$(Configuration)' == 'Release' and '$(PublishFolder)' != ''">
@@ -118,5 +118,33 @@
 
 		<!--<Message Importance="high" Text="ZipBinaries command: $(ZipCmd)"/>-->
 		<Exec Command="$(ZipCmd)"/>
+	</Target>
+
+	<Target Name="RunVerilogTests" Condition="'$(MSBuildProjectName)' == 'LogicCircuit.VerilogTest'">
+		<PropertyGroup>
+			<AllCategories>Simple;BigTest;CPU;Const;Split;Switches</AllCategories>
+			<!--<AllCategories>Simple;BigTest;CPU;Const;Switches</AllCategories>-->
+
+			<UnitTestVerilogFile>$(MSBuildThisFileDirectory)LogicCircuit.UnitTest\Properties\VerilogTests.CircuitProject</UnitTestVerilogFile>
+
+			<Root Condition="'$(Root)' == ''">$(MSBuildThisFileDirectory)..\..\Temp\hdl</Root>
+			<CircuitProject Condition="'$(CircuitProject)' == ''">$(UnitTestVerilogFile)</CircuitProject>
+			<Verilator Condition="'$(Verilator)' == ''">C:\Tools\verilator-5.052</Verilator>
+			<Circuit Condition="'$(Circuit)' == ''"></Circuit>
+			<Category Condition="'$(Circuit)' == '' and '$(Category)' == '' and '$(CircuitProject)' == '$(UnitTestVerilogFile)'">$(AllCategories)</Category>
+
+			<TestTarget></TestTarget>
+			<TestTarget Condition="'$(VerilatorWarnings)' != ''">$(TestTarget) /noWarnings $(VerilatorWarnings)</TestTarget>
+			<TestTarget Condition="'$(Circuit)' != ''">$(TestTarget) /circuit "$(Circuit)"</TestTarget>
+			<TestTarget Condition="'$(Category)' != ''">$(TestTarget) /category "$(Category)"</TestTarget>
+			<TestTarget Condition="'$(TestBench)' != ''">$(TestTarget) /test "$(TestBench)"</TestTarget>
+
+			<VerilogTesterPath>$(OutputPath)LogicCircuit.VerilogTest.exe</VerilogTesterPath>
+
+			<RunVerilogTestsCommand>$(VerilogTesterPath) /root "$(Root)" /project "$(CircuitProject)" /verilator "$(Verilator)" $(TestTarget)</RunVerilogTestsCommand>
+		</PropertyGroup>
+
+		<!--<Message Importance="high" Text="$(RunVerilogTestsCommand)"/>-->
+		<Exec Command="$(RunVerilogTestsCommand)"/>
 	</Target>
 </Project>

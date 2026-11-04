@@ -3,6 +3,8 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -20,7 +22,7 @@ namespace LogicCircuit {
 			}
 
 			public bool Equals(JamBit other) => this.Jam == other.Jam && this.Bit == other.Bit;
-			public override bool Equals(object? obj) => obj is JamBit && this.Equals((JamBit)obj);
+			public override bool Equals(object? obj) => obj is JamBit other && this.Equals(other);
 			public override int GetHashCode() => HashCode.Combine(this.Jam, this.Bit);
 		}
 
@@ -42,7 +44,7 @@ namespace LogicCircuit {
 			this.logWarning = logWarning;
 		}
 
-		protected abstract HdlTransformation? CreateTransformation(string name, IList<HdlSymbol> inputPins, IList<HdlSymbol> outputPins, IList<HdlSymbol> parts);
+		protected abstract HdlTransformation? CreateTransformation(string name, string note, IList<HdlSymbol> inputPins, IList<HdlSymbol> outputPins, IList<HdlSymbol> parts);
 		protected abstract string FileName(LogicalCircuit circuit);
 		public abstract bool CanExport(Circuit circuit);
 		public abstract bool IsValid(string name);
@@ -64,26 +66,35 @@ namespace LogicCircuit {
 
 		public void Warning(string text) => this.logWarning(text);
 
+		[SuppressMessage("Performance", "CA1822:Mark members as static")]
+		protected string Format(string format, params object[] args) => string.Format(CultureInfo.InvariantCulture, format, args);
+
 		public bool ExportCircuit(LogicalCircuit circuit, string folder, bool onlyOne, bool runAsync, Predicate<int>? continueExport, Action onFinished) {
 			CircuitMap map = new CircuitMap(circuit);
 			ConnectionSet connectionSet = map.ConnectionSet();
 
 			bool export(LogicalCircuit logicalCircuit) {
-				string file = this.FileName(logicalCircuit);
-				this.Message(Properties.Resources.MessageExportingHdl(logicalCircuit.Name, file));
-				Dictionary<CircuitSymbol, HdlSymbol> symbolMap = this.Collect(logicalCircuit, connectionSet);
-				if(0 < this.ErrorCount) return false;
-				string? hdl = this.ExportCircuit(logicalCircuit, symbolMap);
-				if(!string.IsNullOrEmpty(hdl)) {
-					string path = Path.Combine(folder, file);
-					File.WriteAllText(path, hdl);
-					this.Message(Properties.Resources.MessageHdlExportResut(logicalCircuit.Name, this.ErrorCount));
-					if(this.ExportTests) {
-						this.ExportTest(logicalCircuit, folder);
+				try {
+					string file = this.FileName(logicalCircuit);
+					this.Message(Properties.Resources.MessageExportingHdl(logicalCircuit.Name, file));
+					Dictionary<CircuitSymbol, HdlSymbol> symbolMap = this.Collect(logicalCircuit, connectionSet);
+					if(0 < this.ErrorCount) return false;
+					string? hdl = this.ExportCircuit(logicalCircuit, symbolMap);
+					if(!string.IsNullOrEmpty(hdl)) {
+						string path = Path.Combine(folder, file);
+						File.WriteAllText(path, hdl);
+						this.Message(Properties.Resources.MessageHdlExportResut(logicalCircuit.Name, this.ErrorCount));
+						if(this.ExportTests) {
+							this.Message(Properties.Resources.MessageExportingHdlTest(logicalCircuit.Name, file));
+							this.ExportTest(logicalCircuit, folder);
+						}
+						return this.ErrorCount == 0;
+					} else {
+						this.Message(Properties.Resources.ErrorExportHdlFile(file));
 					}
-					return this.ErrorCount == 0;
-				} else {
-					this.Message(Properties.Resources.ErrorExportHdlFile(file));
+				} catch(CircuitException circuitException) {
+					this.Error(circuitException.Message);
+					Debug.WriteLine(circuitException.ToString());
 				}
 				return false;
 			}
@@ -222,7 +233,7 @@ namespace LogicCircuit {
 			outputPins.ForEach(symbol => symbol.SortConnections());
 			parts.ForEach(symbol => symbol.SortConnections());
 
-			HdlTransformation? transformation = this.CreateTransformation(circuit.Name, inputPins, outputPins, parts);
+			HdlTransformation? transformation = this.CreateTransformation(circuit.Name, circuit.Note, inputPins, outputPins, parts);
 			if(transformation == null || !this.Validate(transformation)) {
 				return null;
 			}
@@ -312,7 +323,7 @@ namespace LogicCircuit {
 
 					try {
 						bool isTrancated = false;
-						IList<TruthState>? table = socket.BuildTruthTable(reportProgress, () => true, null, DialogTruthTable.MaxRows, out isTrancated);
+						IList<TruthState>? table = socket.BuildTruthTable(reportProgress, () => true, null, 1 << HdlExport.MaxTestableInputBits, out isTrancated);
 						if (table == null || isTrancated) {
 							this.Warning(Properties.Resources.ErrorHdlTruthTableFailed);
 						} else {

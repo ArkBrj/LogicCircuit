@@ -16,8 +16,8 @@
   <ItemGroup>
     <PackageReference Include="Antlr4.Runtime.Standard" Version="4.13.1" />
     <PackageReference Include="Antlr4BuildTasks" Version="12.14.0" />
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
-    <PackageReference Include="MSTest" Version="4.4.1" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
+    <PackageReference Include="MSTest" Version="4.5.2" />
   </ItemGroup>
 
   <ItemGroup>
@@ -73,6 +73,9 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <None Update="Properties\Splitter Conversion.CircuitProject">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="Properties\VerilogTests.CircuitProject">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <None Update="Properties\VisualElementLoadTest.CircuitProject">

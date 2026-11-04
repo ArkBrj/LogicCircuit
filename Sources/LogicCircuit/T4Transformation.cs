@@ -1,27 +1,20 @@
 ﻿using System;
-using System.Globalization;
+using System.Collections.Generic;
 using System.Text;
 
 namespace LogicCircuit {
 	public abstract class T4Transformation {
-		private readonly T4ToStringHelper toStringHelper = new T4ToStringHelper();
-		public T4ToStringHelper ToStringHelper { get { return this.toStringHelper; } }
-
-		private StringBuilder? generationEnvironmentField;
+		public T4ToStringHelper ToStringHelper { get; }
 
 		/// <summary>
 		/// The string builder that generation-time code is using to assemble generated output
 		/// </summary>
-		protected StringBuilder GenerationEnvironment {
-			get {
-				if(this.generationEnvironmentField == null) {
-					this.generationEnvironmentField = new StringBuilder();
-				}
-				return this.generationEnvironmentField;
-			}
-			set {
-				this.generationEnvironmentField = value;
-			}
+		protected StringBuilder GenerationEnvironment { get; }
+		public IDictionary<string, string>? Session { get; init; }
+
+		protected T4Transformation() {
+			this.ToStringHelper = new T4ToStringHelper();
+			this.GenerationEnvironment = new StringBuilder();
 		}
 
 		public abstract string TransformText();
@@ -50,18 +43,33 @@ namespace LogicCircuit {
 			this.GenerationEnvironment.AppendLine();
 		}
 
+		public string Format(string format, params object[] args) {
+			return string.Format(this.ToStringHelper.FormatProvider, format, args);
+		}
+
 		/// <summary>
 		/// Write formatted text directly into the generated output
 		/// </summary>
 		public void Write(string format, params object[] args) {
-			this.Write(string.Format(CultureInfo.InvariantCulture, format, args));
+			this.Write(this.Format(format, args));
 		}
 
 		/// <summary>
 		/// Write formatted text directly into the generated output
 		/// </summary>
 		public void WriteLine(string format, params object[] args) {
-			this.WriteLine(string.Format(CultureInfo.InvariantCulture, format, args));
+			this.WriteLine(this.Format(format, args));
+		}
+
+		public void Write(ReadOnlySpan<char> textToAppend) {
+			if(!textToAppend.IsEmpty) {
+				this.GenerationEnvironment.Append(textToAppend);
+			}
+		}
+
+		public void WriteLine(ReadOnlySpan<char> textToAppend) {
+			this.Write(textToAppend);
+			this.WriteLine();
 		}
 	}
 }

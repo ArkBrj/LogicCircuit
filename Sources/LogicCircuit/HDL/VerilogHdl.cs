@@ -3,14 +3,13 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Globalization;
 using System.Linq;
 
 namespace LogicCircuit {
 	internal sealed class VerilogHdl : HdlTransformation {
 		private readonly Dictionary<Jam, Jam> wires = new();
-		private readonly OneToMany<Jam, HdlConnection> connections = new OneToMany<Jam, HdlConnection>(true);
-		private readonly OneToMany<Jam, HdlConnection> assignments = new OneToMany<Jam, HdlConnection>(true);
+		private readonly OneToMany<Jam, HdlConnection> connections = new(true);
+		private readonly OneToMany<Jam, HdlConnection> assignments = new(true);
 		private readonly Func<string, string> fixName;
 
 		public const string HWIfTypeNamePrefix = "hwif";
@@ -25,7 +24,9 @@ namespace LogicCircuit {
 			}
 		}
 
-		public VerilogHdl(string name, IEnumerable<HdlSymbol> inputPins, IEnumerable<HdlSymbol> outputPins, IEnumerable<HdlSymbol> parts, Func<string, string> fixName) : base(name, inputPins, outputPins, parts) {
+		public VerilogHdl(string name, string note, IEnumerable<HdlSymbol> inputPins, IEnumerable<HdlSymbol> outputPins, IEnumerable<HdlSymbol> parts, Func<string, string> fixName) : base(
+			name, note, inputPins, outputPins, parts
+		) {
 			this.fixName = fixName;
 			this.HWIfInstances = new List<(string, string)>();
 			this.HWIfWires = new List<(string, bool)>();
@@ -64,45 +65,39 @@ namespace LogicCircuit {
 			}
 			foreach(KeyValuePair<Jam, ICollection<HdlConnection>> pair in this.connections) {
 				Jam jam = pair.Key;
-				ICollection<HdlConnection> connections = pair.Value;
-				Debug.Assert(0 < connections.Count);
+				ICollection<HdlConnection> list = pair.Value;
+				Debug.Assert(0 < list.Count);
 				if(jam.Pin.PinType == PinType.Output && jam.CircuitSymbol.Circuit is not Constant) {
 					// Find first Pin of the same bit width as the jam, but on the other side of connection. This pin will serve as wire. With exception if it's the only pin is connected to the jam.
-					Jam? other = connections.Select(c => c.OtherJam(jam)).FirstOrDefault(j => j.CircuitSymbol.Circuit is Pin pin && (pin.BitWidth == jam.Pin.BitWidth || 1 == connections.Count));
+					Jam? other = list.Select(c => c.OtherJam(jam)).FirstOrDefault(j => j.CircuitSymbol.Circuit is Pin pin && pin.BitWidth == jam.Pin.BitWidth);
 					if(other != null) {
 						this.wires.Add(jam, other);
 					} else {
 						this.wires.Add(jam, jam);
 					}
-					foreach(HdlConnection connection in connections) {
+					foreach(HdlConnection connection in list) {
 						Jam j = connection.OtherJam(jam);
 						if(j != other && j.CircuitSymbol.Circuit is Pin) {
-							assignments.Add(jam, connection);
+							this.assignments.Add(jam, connection);
 						}
 					}
 				}
 			}
 		}
 
-		public static string Range(BasePin pin) {
+		public string Range(BasePin pin) {
 			Debug.Assert(0 < pin.BitWidth);
-			return (pin.BitWidth == 1) ? "" : string.Format(CultureInfo.InvariantCulture, "[{0}:0]", pin.BitWidth - 1);
+			return (pin.BitWidth == 1) ? "" : this.Format("[{0}:0]", pin.BitWidth - 1);
 		}
-		public static string Range(HdlConnection.BitRange range) => string.Format(CultureInfo.InvariantCulture, (range.First == range.Last) ? "[{0}]" : "[{0}:{1}]", range.Last, range.First);
-
-		private void WriteRange(BasePin pin) {
-			if(1 < pin.BitWidth) {
-				this.Write(VerilogHdl.Range(pin));
-			}
-		}
+		public string Range(HdlConnection.BitRange range) => this.Format((range.First == range.Last) ? "[{0}]" : "[{0}:{1}]", range.Last, range.First);
 
 		private string WireName(Jam jam) {
-			Debug.Assert(jam.Pin.PinType != PinType.Input);
+			Tracer.Assert(jam.Pin.PinType != PinType.Input);
 			if(jam.CircuitSymbol.Circuit is Pin pin) {
 				return this.fixName(pin.Name);
 			} else {
 				GridPoint point = jam.AbsolutePoint;
-				return string.Format(CultureInfo.InvariantCulture, "Pin{0}x{1}", point.X, point.Y);
+				return this.Format("Pin{0}x{1}", point.X, point.Y);
 			}
 		}
 
@@ -115,14 +110,14 @@ namespace LogicCircuit {
 			Jam otherJam = connection.OtherJam(jam);
 			if(otherJam.CircuitSymbol.Circuit is Constant constant) {
 				int value = connection.OutBits.Extract(constant.ConstantValue);
-				return string.Format(CultureInfo.InvariantCulture, "{0}'h{1:x}", connection.OutBits.BitWidth, value);
+				return this.Format("{0}'h{1:x}", connection.OutBits.BitWidth, value);
 			} else {
 				if(otherJam.Pin.PinType == PinType.Input) {
 					otherJam = jam;
 				}
 				string text = this.Wire(otherJam);
 				if(connection.IsBitRange(connection.Symbol(otherJam))) {
-					text += VerilogHdl.Range(connection.JamRange(otherJam));
+					text += this.Range(connection.JamRange(otherJam));
 				}
 				return text;
 			}
@@ -147,17 +142,17 @@ namespace LogicCircuit {
 		private void WriteMemory(HdlSymbol symbol) {
 			Memory memory = (Memory)symbol.CircuitSymbol.Circuit;
 
-			this.Write("module {0}(input{1} address, output{2} dataOut", symbol.HdlExport.HdlName(symbol), VerilogHdl.Range(memory.AddressPin), VerilogHdl.Range(memory.DataOutPin));
+			this.Write("module {0}(input{1} address, output{2} dataOut", symbol.HdlExport.HdlName(symbol), this.Range(memory.AddressPin), this.Range(memory.DataOutPin));
 			if(memory.Writable) {
-				this.Write(", input{0} dataIn, input write", VerilogHdl.Range(memory.DataOutPin));
+				this.Write(", input{0} dataIn, input write", this.Range(memory.DataOutPin));
 			}
 			if(memory.DualPort) {
-				this.Write(", input{0} address2, output{1} dataOut2", VerilogHdl.Range(memory.Address2Pin), VerilogHdl.Range(memory.DataOut2Pin));
+				this.Write(", input{0} address2, output{1} dataOut2", this.Range(memory.Address2Pin), this.Range(memory.DataOut2Pin));
 			}
 			this.WriteLine(");");
 
 			// allocate memory array
-			this.WriteLine("\treg{0} memory[0:{1}];", VerilogHdl.Range(memory.DataOutPin), (1 << memory.AddressBitWidth) - 1);
+			this.WriteLine("\treg{0} memory[0:{1}];", this.Range(memory.DataOutPin), (1 << memory.AddressBitWidth) - 1);
 			if(memory.Writable && memory.OnStart != MemoryOnStart.Data) {
 				this.WriteLine("\tinteger i;");
 			}
@@ -170,7 +165,7 @@ namespace LogicCircuit {
 				int dataWidth = memory.DataBitWidth;
 				int max = 1 << addressWidth;
 				for(int i = 0; i < max; i++) {
-					this.WriteLine("\t\tmemory[{0}] = {1};", i, Memory.CellValue(data, dataWidth, i).ToString(CultureInfo.InvariantCulture));
+					this.WriteLine("\t\tmemory[{0}] = {1};", i, Memory.CellValue(data, dataWidth, i));
 				}
 			} else {
 				string value = memory.OnStart switch {
@@ -203,8 +198,23 @@ namespace LogicCircuit {
 			this.WriteLine();
 		}
 
+		private void WriteComment(int indent, string comment) {
+			if(this.CommentPoints && !string.IsNullOrWhiteSpace(comment)) {
+				foreach(ReadOnlySpan<char> line in comment.EnumerateLines()) {
+					if(0 < indent) {
+						this.Write(new string('\t', indent));
+					}
+					this.Write("// ");
+					this.WriteLine(line);
+				}
+			}
+		}
+
 		public override string TransformText() {
 			this.Prepare();
+
+			this.WriteLine("// This file is generated by LogicCircuit version {0} from circuit {1}", DialogAbout.CurrentVersion(),  this.Name);
+			this.WriteLine();
 
 			foreach(HdlSymbol symbol in this.Parts) {
 				if(symbol.CircuitSymbol.Circuit is Memory) {
@@ -212,16 +222,17 @@ namespace LogicCircuit {
 				}
 			}
 
-			this.WriteLine("// This file is generated by LogicCircuit version {0} from circuit {1}", DialogAbout.CurrentVersion(), this.Name);
+			this.WriteComment(0, this.Note);
 			this.WriteLine("module {0}(", this.Name);
 			this.Write("\t{0} {1}", this.HWIfTypeName, HWIfParamName);
-
 			bool comma = true;
+
 			foreach(HdlSymbol symbol in this.InputPins.Concat(this.OutputPins)) {
 				Pin pin = (Pin)symbol.CircuitSymbol.Circuit;
 				if(comma) this.WriteLine(",");
+				this.WriteComment(1, pin.Note);
 				this.Write("\t{0}", pin.PinType == PinType.Input ? "input" : "output");
-				this.WriteRange(pin);
+				this.Write(this.Range(pin));
 				this.Write("\t{0}", this.fixName(pin.Name));
 				comma = true;
 			}
@@ -230,7 +241,7 @@ namespace LogicCircuit {
 
 			foreach(Jam jam in this.wires.Values.Where(j => j.CircuitSymbol.Circuit is not Pin).OrderBy(j => j.AbsolutePoint, Comparer<GridPoint>.Create(VerilogHdl.CompareGridPoint))) {
 				this.Write("\twire");
-				this.WriteRange(jam.Pin);
+				this.Write(this.Range(jam.Pin));
 				this.WriteLine(" {0};", this.WireName(jam));
 			}
 			this.WriteLine();
@@ -252,7 +263,7 @@ namespace LogicCircuit {
 					this.WriteLine("\t{0} {0}_{1}x{2}(", part.HdlExport.HdlName(part), part.CircuitSymbol.X, part.CircuitSymbol.Y);
 					if(!(part.CircuitSymbol.Circuit is Gate gate2 &&
 							(GateType.Not <= gate2.GateType && gate2.GateType <= GateType.Xor || GateType.TriState1 <= gate2.GateType)) &&
-						!(part.CircuitSymbol.Circuit is Memory)) {
+							!(part.CircuitSymbol.Circuit is Memory)) {
 						this.HWIfInstances.Add((HWIfPartTypeName(part), HWIfPartInstanceFieldName(part)));
 						this.Write("\t\t.{0}({0}.{1})", HWIfParamName, HWIfPartInstanceFieldName(part));
 						comma = true;
@@ -261,40 +272,45 @@ namespace LogicCircuit {
 
 				if(part.CircuitSymbol.Circuit is Gate gate) {
 					if(GateType.Not <= gate.GateType && gate.GateType <= GateType.Xor || GateType.TriState1 <= gate.GateType || GateType.Clock == gate.GateType || GateType.Led == gate.GateType) {
+						// In gate level model put output pin first, and other pins later
 						Jam? output = part.CircuitSymbol.Jams().FirstOrDefault(j => j.Pin.PinType == PinType.Output);
-
-						if(output != null && this.connections.TryGetValue(output, out ICollection<HdlConnection>? outputs)) {
+						if(output != null && this.connections.TryGetValue(output, out ICollection<HdlConnection>? recipients)) {
 							if(external) {
 								// Add the used input external port to the collection (input since here it is used for output).
 								this.HWIfWires.Add((HWIfPartInstanceFieldPinName(part, output.Pin.Name), false));
 								this.WriteLine("\tassign {0} = {1}.{2};", this.Wire(output), HWIfParamName, HWIfPartInstanceFieldPinName(part, output.Pin.Name));
 							} else {
-								if(1 < outputs.Count) {
+								if(1 < recipients.Count || recipients.First().IsBitRange()) {
 									this.Write("\t\t{0}", this.Wire(output));
 								} else {
-									Debug.Assert(1 == outputs.Count);
-									this.Write("\t\t{0}", this.WirePlug(outputs.First(), output));
+									Debug.Assert(1 == recipients.Count);
+									this.Write("\t\t{0}", this.WirePlug(recipients.First(), output));
 								}
 							}
 						}
+
+						// All the other gate connections are inputs.
 						List<Jam> inputs = part.CircuitSymbol.Jams().Where(j => j.Pin.PinType == PinType.Input).ToList();
 						inputs.Sort(JamComparer.Comparer); // this will place tri-state enable pin at the end - this is how Verilog expects it.
 						foreach(Jam input in inputs) {
 							if(this.connections.TryGetValue(input, out ICollection<HdlConnection>? list)) {
-								if(1 < list.Count) {
-									part.HdlExport.Error(
-										Properties.Resources.ErrorManyResults(input.Pin.Name, part.CircuitSymbol.Circuit.Name, part.CircuitSymbol.Point.ToString(), part.CircuitSymbol.LogicalCircuit.Name)
-									);
-									return string.Empty;
-								}
-								if(external) {
-									string member_if_instance = String.Format(System.Globalization.CultureInfo.InvariantCulture, "{0}_{1}x{2}_{3}", part.HdlExport.HdlName(part), part.CircuitSymbol.X, part.CircuitSymbol.Y, input.Pin.Name);
-									// Add the used output external port to the collection (output since here it is used for input).
-									this.HWIfWires.Add((HWIfPartInstanceFieldPinName(part, input.Pin.Name), true));
-									this.WriteLine("\tassign {0}.{1} = {2};", HWIfParamName, HWIfPartInstanceFieldPinName(part, input.Pin.Name), this.WirePlug(list.First(), input));
-								} else {
-									this.WriteLine(",");
-									this.Write("\t\t{0}", this.WirePlug(list.First(), input));
+								// Here it is possible to have more than one connection sending data to the input.
+								// If these connections are note tri state capable it should be an error.
+								// However it is not possible to check it here as there is no full information on what exactly connected here.
+								// So, ignore it here, made all the connections, and hope the user was checking the circuit before exporting it to Verilog.
+								// If user is exporting test bench for this circuit the error will pop up during truth table building.
+								// Otherwise is user's mistake.
+								// TODO: Here it's must generate AND connecting all the inputs as the LogicCircuit doing exactly that.
+								foreach(HdlConnection connection in list) {
+									if(external) {
+										string member_if_instance = String.Format(System.Globalization.CultureInfo.InvariantCulture, "{0}_{1}x{2}_{3}", part.HdlExport.HdlName(part), part.CircuitSymbol.X, part.CircuitSymbol.Y, input.Pin.Name);
+										// Add the used output external port to the collection (output since here it is used for input).
+										this.HWIfWires.Add((HWIfPartInstanceFieldPinName(part, input.Pin.Name), true));
+										this.WriteLine("\tassign {0}.{1} = {2};", HWIfParamName, HWIfPartInstanceFieldPinName(part, input.Pin.Name), this.WirePlug(list.First(), input));
+									} else {
+										this.WriteLine(",");
+										this.Write("\t\t{0}", this.WirePlug(connection, input));
+									}
 								}
 							}
 						}
@@ -303,19 +319,19 @@ namespace LogicCircuit {
 					}
 				} else {
 					foreach(Jam jam in part.CircuitSymbol.Jams()) {
+						if(!external) {
+							if(comma) this.WriteLine(",");
+							comma = true;
+							this.Write("\t\t.{0}(", part.HdlExport.HdlName(jam));
+						}
 						if(this.connections.TryGetValue(jam, out ICollection<HdlConnection>? list)) {
-							if(!external) {
-								if(comma) this.WriteLine(",");
-								comma = true;
-								this.Write("\t\t.{0}(", part.HdlExport.HdlName(jam));
-							}
 							if(jam.Pin.PinType == PinType.Output) {
 								if(external) {
 									// Add the used input external port to the collection (input since here it is used for output).
 									this.HWIfWires.Add((HWIfPartInstanceFieldPinName(part, jam.Pin.Name), false));
 									this.WriteLine("\tassign {0} = {1}.{2};", this.Wire(jam), HWIfParamName, HWIfPartInstanceFieldPinName(part, jam.Pin.Name));
 								} else {
-									if(1 < list.Count) {
+									if(1 < list.Count || list.First().IsBitRange()) {
 										this.Write(this.Wire(jam));
 									} else {
 										this.Write(this.WirePlug(list.First(), jam));
@@ -335,10 +351,7 @@ namespace LogicCircuit {
 									this.Write("}");
 								}
 							}
-							if(!external) {
-								this.Write(")");
-							}
-						} else {
+						} /*else {
 							// Even if the pin is not connected, we still need to include it in the module instantiation.
 							//
 							if(jam.Pin.PinType == PinType.Output) {
@@ -347,6 +360,9 @@ namespace LogicCircuit {
 								this.Write("\t\t.{0}()", part.HdlExport.HdlName(jam));
 								comma = true;
 							}
+						} */
+						if(!external) {
+							this.Write(")");
 						}
 					}
 				}
@@ -359,12 +375,18 @@ namespace LogicCircuit {
 			this.WriteLine();
 
 			if(0 < this.assignments.Count) {
+				List<string> lines = new();
+
 				foreach(KeyValuePair<Jam, ICollection<HdlConnection>> pair in this.assignments) {
 					Jam jam = pair.Key;
 					ICollection<HdlConnection> list = pair.Value;
 					foreach(HdlConnection connection in list) {
-						this.WriteLine("\tassign {0} = {1};", this.WirePlug(connection, jam), this.WirePlug(connection, connection.OtherJam(jam)));
+						lines.Add(this.Format("\tassign {0} = {1};", this.WirePlug(connection, jam), this.WirePlug(connection, connection.OtherJam(jam))));
 					}
+				}
+				lines.Sort();
+				foreach(string line in lines) {
+					this.WriteLine(line);
 				}
 				this.WriteLine();
 			}

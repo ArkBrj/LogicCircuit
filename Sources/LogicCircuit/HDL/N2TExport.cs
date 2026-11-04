@@ -40,9 +40,9 @@ namespace LogicCircuit {
 		) {
 		}
 
-		protected override HdlTransformation? CreateTransformation(string name, IList<HdlSymbol> inputPins, IList<HdlSymbol> outputPins, IList<HdlSymbol> parts) {
+		protected override HdlTransformation? CreateTransformation(string name, string note, IList<HdlSymbol> inputPins, IList<HdlSymbol> outputPins, IList<HdlSymbol> parts) {
 			if(this.FixBigGates(parts)) {
-				return new N2THdl(this.FixName(name), inputPins, outputPins, parts, this.FixName);
+				return new N2THdl(this.FixName(name), note, inputPins, outputPins, parts, this.FixName);
 			}
 			return null;
 		}
@@ -312,8 +312,8 @@ namespace LogicCircuit {
 					trail = 1;
 					break;
 				}
-				string format = string.Format(CultureInfo.InvariantCulture, "{{0,{0}}}", lead);
-				string result = string.Format(CultureInfo.InvariantCulture, format, text) + new string(' ', trail);
+				string format = this.Format("{{0,{0}}}", lead);
+				string result = this.Format(format, text) + new string(' ', trail);
 				return result;
 			}
 			StringBuilder expect = new StringBuilder();

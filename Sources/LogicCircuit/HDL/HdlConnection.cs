@@ -3,7 +3,6 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Globalization;
 using System.Linq;
 
 namespace LogicCircuit {
@@ -93,7 +92,28 @@ namespace LogicCircuit {
 		private readonly List<int>? inBits;
 		public BitRange InBits => (this.inBits != null) ? new BitRange(this.inBits) : new BitRange(this.InJam);
 
-		public bool IsBitRange(HdlSymbol symbol) => this.outBits != null && this.outBits.Count < ((symbol == this.OutHdlSymbol) ? this.OutJam : this.InJam).Pin.BitWidth;
+		public bool IsBitRange() => this.outBits != null;
+
+		public bool IsBitRange(HdlSymbol symbol) {
+			Tracer.Assert(this.OutHdlSymbol == symbol || this.InHdlSymbol == symbol);
+			Tracer.Assert(this.outBits == null || this.outBits.Count == this.inBits!.Count);
+			if(this.outBits != null) {
+				Debug.Assert(this.inBits != null);
+				List<int> bits = (symbol == this.OutHdlSymbol) ? this.outBits : this.inBits;
+				Jam jam = this.SymbolJam(symbol);
+				int bitWidth = jam.Pin.BitWidth;
+				if(bits.Count == bitWidth) {
+					for(int i = 0; i < bits.Count; i++) {
+						if(bits[i] != i) {
+							return true;
+						}
+					}
+					return false;
+				}
+				return true;
+			}
+			return false;
+		}
 
 		/// <summary>
 		/// This allow to skip specifying the same output for multiple connections, so only one will provide output and all other are not.
@@ -162,10 +182,10 @@ namespace LogicCircuit {
 			}
 		}
 
-		public HdlSymbol OtherSymbol(HdlSymbol symbol) {
-			Debug.Assert(symbol == this.OutHdlSymbol || symbol == this.InHdlSymbol);
-			return (symbol == this.OutHdlSymbol) ? this.InHdlSymbol : this.OutHdlSymbol;
-		}
+		//public HdlSymbol OtherSymbol(HdlSymbol symbol) {
+		//	Debug.Assert(symbol == this.OutHdlSymbol || symbol == this.InHdlSymbol);
+		//	return (symbol == this.OutHdlSymbol) ? this.InHdlSymbol : this.OutHdlSymbol;
+		//}
 		public Jam OtherJam(Jam jam) {
 			Debug.Assert(jam == this.OutJam || jam == this.InJam);
 			return (jam == this.OutJam) ? this.InJam : this.OutJam;

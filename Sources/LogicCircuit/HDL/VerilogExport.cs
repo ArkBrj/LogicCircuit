@@ -3,7 +3,6 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
@@ -14,10 +13,11 @@ namespace LogicCircuit {
 	/// Some useful links.
 	/// Good tutorial: https://www.chipverify.com/
 	/// Another one: https://www.asic-world.com/
-	/// And enother one: http://www.emmelmann.org/Pages/Library_TutorialsWS.html
-	/// On line test bench. Run generated code there: https://www.edaplayground.com/
+	/// And another one: http://www.emmelmann.org/Pages/Library_TutorialsWS.html
+	/// Online test bench. Run generated code there: https://www.edaplayground.com/
 	/// </summary>
 	internal sealed class VerilogExport : HdlExport {
+		private VerilogHdl? lastVerilogHdl;
 		private readonly Regex identifier = new Regex(@"^[a-zA-Z_][a-zA-Z0-9_$]*$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 		private readonly Regex notSupportedChars = new Regex(@"\s|[,.?/!@#$%^&*()\-+={}[\]|\\<>~`]", RegexOptions.Compiled);
 
@@ -69,7 +69,7 @@ namespace LogicCircuit {
 			bool valid = base.Validate(transformation);
 			OneToMany<Jam, HdlConnection> jams = new OneToMany<Jam, HdlConnection>(true);
 			foreach(HdlSymbol symbol in transformation.Parts.Concat(transformation.OutputPins)) {
-				// check for floating IO ports. Most of the gates can be excluded as floating port will be generated.
+				// check for floating IO ports. Most of the gates can be excluded as floating port will not be generated.
 				Gate? gate = symbol.CircuitSymbol.Circuit as Gate;
 				if(gate == null || gate.GateType == GateType.TriState1 || gate.GateType == GateType.TriState2) {
 					jams.Clear();
@@ -112,8 +112,10 @@ namespace LogicCircuit {
 			return valid;
 		}
 
-		protected override HdlTransformation? CreateTransformation(string name, IList<HdlSymbol> inputPins, IList<HdlSymbol> outputPins, IList<HdlSymbol> parts) {
-			return new VerilogHdl(this.FixName(name), inputPins, outputPins, parts, this.FixName);
+		protected override HdlTransformation? CreateTransformation(string name, string note, IList<HdlSymbol> inputPins, IList<HdlSymbol> outputPins, IList<HdlSymbol> parts) {
+			VerilogHdl verilogHdl = new VerilogHdl(this.FixName(name), note, inputPins, outputPins, parts, this.FixName);
+			this.lastVerilogHdl = verilogHdl;
+			return verilogHdl;
 		}
 
 		public override string HdlName(HdlSymbol symbol) {
@@ -136,9 +138,9 @@ namespace LogicCircuit {
 			}
 			if(circuit is Memory memory) {
 				if(memory.Writable) {
-					return string.Format(CultureInfo.InvariantCulture, "{0}_RAM_{1}x{2}", this.FixName(symbol.CircuitSymbol.LogicalCircuit.Name), symbol.CircuitSymbol.X, symbol.CircuitSymbol.Y);
+					return this.Format("{0}_RAM_{1}x{2}", this.FixName(symbol.CircuitSymbol.LogicalCircuit.Name), symbol.CircuitSymbol.X, symbol.CircuitSymbol.Y);
 				} else {
-					return string.Format(CultureInfo.InvariantCulture, "{0}_ROM_{1}x{2}", this.FixName(symbol.CircuitSymbol.LogicalCircuit.Name), symbol.CircuitSymbol.X, symbol.CircuitSymbol.Y);
+					return this.Format("{0}_ROM_{1}x{2}", this.FixName(symbol.CircuitSymbol.LogicalCircuit.Name), symbol.CircuitSymbol.X, symbol.CircuitSymbol.Y);
 				}
 			}
 			return this.FixName(circuit.Name.Trim());
@@ -158,8 +160,11 @@ namespace LogicCircuit {
 		}
 
 		protected override void ExportTest(string circuitName, List<InputPinSocket> inputs, List<OutputPinSocket> outputs, IList<TruthState> table, string folder) {
+			Debug.Assert(this.lastVerilogHdl is not null);
 			VerilogTestBench verilogTest = new VerilogTestBench(
+				this.lastVerilogHdl,
 				this.FixName(circuitName),
+				this.TestBenchModuleName(circuitName),
 				inputs,
 				outputs,
 				table,
@@ -167,11 +172,15 @@ namespace LogicCircuit {
 			);
 			string text = verilogTest.TransformText();
 			if(!string.IsNullOrWhiteSpace(text)) {
-				string testFile = Path.Combine(folder, this.FixName(circuitName) + "_TestBench.sv");
+				string testFile = Path.Combine(folder, this.TestBenchFileName(circuitName));
 				File.WriteAllText(testFile, text);
 				this.Message(Properties.Resources.MessageHdlSavingTestFile(testFile));
 			}
 		}
+
+		public string TestBenchModuleName(string circuitName) => this.FixName(circuitName) + "_TestBench";
+		public string TestBenchFileName(string circuitName) => this.TestBenchModuleName(circuitName) + ".sv";
+
 		protected override void FinalizeTransformation(HdlTransformation transformation, LogicalCircuit circuit) {
 			VerilogHdl? verilogTransform = transformation as VerilogHdl;
 			Trace.Assert(verilogTransform != null);
